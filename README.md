@@ -1,7 +1,7 @@
 # codecademy_pokemon
 
 $September 2nd, 2020 10:00 PM
-#Pre-Alpha 1.01 - Added looping test scenario, trainer AI implemented, and conditions which trigger defeat
+#Pre-Alpha 1.01 - Added looping test scenario, trainer AI implemented, and conditions which trigger defeat and exiting the program. Also began level-up logic and level-up lookup trees/formulas.
 
 #September 2nd, 2020 4:00 PM
 #Pre-Alpha 1.0 - Initial gh commit with project specs 1 - 8 implemented, minimal error cases in interaction, and buildouts of scalable objects and data structures
