@@ -50,7 +50,7 @@ class Item:
       
 
 class Trainer:
-  def __init__(self,name,pokemon,items):
+  def __init__(self,name,pokemon,items,isPlayer = False):
     self.name = name
     self.pokemon = []
     for i in pokemon:
@@ -60,6 +60,7 @@ class Trainer:
       self.items.append(i)
     self.actPokeIdx = 0 #index of active pokemon on roster
     self.activePokemon = self.pokemon[self.actPokeIdx]
+    self.isPlayer = isPlayer
     
   def __repr__(self):
     returnMe = self.name + ": with \n"
@@ -90,30 +91,54 @@ class Trainer:
       elif isValidInput(action.upper(),"R"):
         #No Map layer to return to, so just quits the program.
         input("Ran away safely! \n\n Press enter to exit the program.")
-        exit()
+        exit(0)
       else:
         print("Command not recognized. Try again!")
 
   def ai_turn(self, opponent):
-    roll = random.randint(1, 100)
+    choice = self.ai_chooseAction(opponent)
     while(True):
-      if roll >= 20:
-        if self.fight(opponent): #Tries to fight if roll high enough
-          input_to_continue()
+      if choice == "Fight":
+        if self.fight(opponent): #Tries to fight if roll is high enough
           return
-        roll = random.randint(10,20)
         continue #Reroll
-      if 10 < roll < 20:
+      if choice == "Item":
         if self.useItem(0): #Tries to use an item (potion) if available
-          input_to_continue()
           return
-        roll = random.randint(1, 10)
-      if roll < 10:
-        if self.changePokemon():
-          input_to_continue()
+      if choice == "Pokemon":
+        if self.changePokemon(self.ai_choosePokemon()):
           return
-        
-      
+
+  def ai_chooseAction(self, opponent, strategy = None):
+    fightWeight = 100 #by default, the AI trainer will use one of their pokemon's moves, regardless of roll.
+    itemWeight = 0 #by default, the AI trainer will not use an item, regardless of roll.
+    changeWeight = 0 #by default, the AI trainer will not change pokemon, regardless of roll.
+
+    #Conditions which make certain choices appealing.
+    #When pokemon below half health, more likely to use a potion.
+    if self.activePokemon.health < self.activePokemon.max_health//2:
+      itemWeight += 50
+    #When pokemon in peril, more likely to change to someone else.
+    if self.activePokemon.health < self.activePokemon.max_health//4:
+      changeWeight += 50
+
+    #Conditions under which actions are impossible
+    if self.countReadyPokemon() == 1: #Can't change if down to last pokemon!
+      changeWeight = 0
+    if not self.items: #Can't use an item without items!
+      itemWeight = 0
+
+    #Weighting complete. Roll for fighting as an option.
+    roll = random.randint(1,fightWeight+itemWeight+changeWeight)
+    if roll <= fightWeight:
+      return "Fight"
+    #If fighting ruled out, roll for using an item. Certain if unable to change pokemon.
+    roll = random.randint(1,itemWeight+changeWeight)
+    if roll <= itemWeight:
+      return "Item"
+    #If Item ruled out
+    return "Pokemon" #Last possible choice
+
 
   def fight(self, opponent):
     attacker = self.activePokemon #Defines who's using the move
@@ -122,7 +147,6 @@ class Trainer:
       print("{} has no will to fight!".format(attacker))
       return False
     attacker.attack(attacker.types[0],defender) #Uses the move
-    input_to_continue()
     return True
 
   def useItem(self,itemindex):
@@ -133,17 +157,30 @@ class Trainer:
       self.items[itemindex].use(self.activePokemon)
 
       self.items.pop(itemindex)
-      input_to_continue()
       return True
     else:
       print("Item is not valid")
       return False
-          
-  def changePokemon(self, mandatory = False): #Use 'True' for when the active pokemon just fainted."
-    if self.isRosterAllFainted(): #Having no valid Pokemon to send out ends the battle in defeat!
+
+
+  #changePokemon handles all pokemon swaps. With no arguments, player chooses a pokemon or can cancel back to main menu.
+  #Pass a chosenIdx integer for an AI trainer change or a random swap. This integer should already be checked for validity before calling the function.
+  #Pass chosenIdx as None and mandatory as 'True' for when the active pokemon just fainted. This prevents cancelling out and forces a valid change if possible (or defeat if impossible!)     
+  def changePokemon(self, chosenIdx = None, mandatory = False):  
+    if self.countReadyPokemon() == 0: #Having no valid Pokemon to send out ends the battle in defeat!
       self.defeated()
       return True #Right now not reachable, but in case defeat no longer ends the scenario
+
+    if chosenIdx: #Skipped if function is run with no arguments or with an explicit 'None' as first argument.
+      print("{}, come back!".format(self.activePokemon))
+      self.actPokeIdx = chosenIdx #Changes the index of the now-active pokemon in the roster
+      self.activePokemon = self.pokemon[self.actPokeIdx] #Chosen pokemon is now active!
+      print("Go, {}!".format(self.activePokemon))
+      print(self.activePokemon.report())
+      return True #Success
     while(True): #If there's a valid pokemon to switch to, keep trying unless cancelled.
+
+
       for i in range(0, len(self.pokemon)):
         print("[{0}] for: {1}".format(i, self.pokemon[i].report()))
       if mandatory:
@@ -167,31 +204,40 @@ class Trainer:
           self.activePokemon = self.pokemon[self.actPokeIdx] #Chosen pokemon is now active!
           print("Go, {}!".format(self.activePokemon))
           print(self.activePokemon.report())
-          input_to_continue()
           return True #Success
       if mandatory:
         continue #If the change is required.
       else:
         return False #Go back to main prompt with any other key
 
-  #def ai_changePokemon(self, index, mandatory = False):
-  #  while(True):
+  def ai_choosePokemon(self):
+    options = []
+    for i in range(0, len(self.pokemon) - 1):
+      if self.pokemon[i].status == "Fainted" or i == self.actPokeIdx: #Error check: can't switch to a pokemon with zero HP.
+        continue #Don't include as an option if not valid
+      else:
+        options.append(i) #Include if valid
+    #Pick a pokemon from the valid options
+    return random.choice(options)
 
-  def isRosterAllFainted(self):
+  def aftermath(self): #Check statuses after action.
+    if self.activePokemon.status == "Fainted":
+      if self.isPlayer:
+        self.changePokemon(None, True) #Must change pokemon, or defeated if unable
+      else:
+        self.changePokemon(self.ai_choosePokemon, True) #Must change pokemon, or defeated if unable
+
+  def countReadyPokemon(self):
+    count = 0
     for i in range(0, len(self.pokemon)):
       if self.pokemon[i].status != "Fainted":
-        return False
-    else:
-      return True
+        count += 1
+    return count
 
   def defeated(self):
     print ("{0} was defeated!".format(self.name))
     input_to_continue()
-    exit() #Ends the program for now
-  
-
-
-
+    exit(0) #Ends the program for now
 
 
         
@@ -199,25 +245,25 @@ class Trainer:
 
 potion = Item("Potion","Heal",20)
 pokemon_types.generateTypes()
-print(pokemon_types.ptypes)
 
 
   
   
 # Run Program
 print("Starting Pokemon Battle Test")
-playerTrainer = Trainer("Ash",[pokemon.Bulbasaur_001(10),pokemon.Squirtle_007(10)],[potion, potion, potion, potion])
+playerTrainer = Trainer("Ash",[pokemon.Bulbasaur_001(10),pokemon.Squirtle_007(10)],[potion, potion, potion, potion], True)
 opponentTrainer = Trainer("Gary",[pokemon.Charmander_004(10)],[potion, potion, potion, potion])
 
 print(playerTrainer)
 print(opponentTrainer)
 
-playerTrainer.prompt(opponentTrainer)
-opponentTrainer.fight(playerTrainer)
-playerTrainer.prompt(opponentTrainer)
-opponentTrainer.useItem(0)
-playerTrainer.prompt(opponentTrainer)
-opponentTrainer.fight(playerTrainer)
+while(True):
+  playerTrainer.prompt(opponentTrainer)
+  playerTrainer.aftermath()
+  opponentTrainer.aftermath()
+  opponentTrainer.ai_turn(playerTrainer)
+  playerTrainer.aftermath()
+  opponentTrainer.aftermath()
 #playerTrainer.fight(opponentTrainer)
 #playerTrainer.changePokemon(1)
 #playerTrainer.changePokemon(0)

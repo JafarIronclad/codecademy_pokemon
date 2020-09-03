@@ -1,5 +1,6 @@
 import pokemon_types
 import random
+import cfg
 
 #Supporting Classes & Functions:
 
@@ -66,10 +67,11 @@ class Pokemon:
     def attack(self, atktype, target):
         #Pre-Moves implementation simply uses attack type. Eventually, uses the move itself:
         print("{} used {}-type attack.".format(self,atktype))
+        cfg.input_to_continue()
         #key to continue eventually
         roll = random.randint(1, 100)
-        if roll < 90: #Eventually, uses the move's accuracy and own accuracy modifiers.
-            self.inflict(atktype, target, 40) #Eventually, uses the move's power.
+        if roll <= 80: #Eventually, uses the move's accuracy and own accuracy modifiers.
+            self.inflict(atktype, target, 10) #Eventually, uses the move's power.
         else:
             print("{0}'s attack missed!".format(self.name)) #Missed!
             return
